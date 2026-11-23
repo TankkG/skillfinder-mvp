@@ -1,0 +1,35 @@
+{
+  "name": "skillfinder",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SkillFinder - plataforma web y movil para encontrar servicios mecanicos automotrices por geolocalizacion.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @skillfinder/api",
+    "dev:client": "npm run start -w @skillfinder/client",
+    "web": "npm run web -w @skillfinder/client",
+    "android": "npm run android -w @skillfinder/client",
+    "build:api": "npm run build -w @skillfinder/api",
+    "start:api": "npm run start -w @skillfinder/api",
+    "seed": "npm run seed -w @skillfinder/api",
+    "test:api": "npm run test -w @skillfinder/api",
+    "typecheck": "npm run typecheck -w @skillfinder/api && npm run typecheck -w @skillfinder/client",
+    "build:shared": "npm run build -w @skillfinder/shared",
+    "postinstall": "npm run build:shared",
+    "grafana:up": "docker compose --env-file .env -f infra/docker-compose.yml up -d --build",
+    "grafana:down": "docker compose --env-file .env -f infra/docker-compose.yml down",
+    "grafana:logs": "docker compose --env-file .env -f infra/docker-compose.yml logs -f api prometheus grafana",
+    "grafana:ps": "docker compose --env-file .env -f infra/docker-compose.yml ps",
+    "seed:docker": "docker compose --env-file .env -f infra/docker-compose.yml --profile tools run --rm seed",
+    "grafana:refresh": "docker compose --env-file .env -f infra/docker-compose.yml restart api",
+    "grafana:build": "node infra/grafana/build-dashboards.mjs",
+    "grafana:check": "node infra/grafana/check-dashboards.mjs",
+    "grafana:sync": "node infra/grafana/build-dashboards.mjs && powershell -ExecutionPolicy Bypass -File ./local-windows/SINCRONIZAR-DASHBOARDS.ps1 -User admin -Password admin"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

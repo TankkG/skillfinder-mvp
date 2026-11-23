@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+.export-check/
+web-build/
+coverage/
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+uploads/
+apps/api/uploads/
+apps/api/private-uploads/
+*.tsbuildinfo
+.idea/
+.vscode/
+
+# Herramientas y datos de monitoreo local (Windows sin Docker)
+.tools/
+.local-data/

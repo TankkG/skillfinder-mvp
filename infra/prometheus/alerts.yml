@@ -1,0 +1,66 @@
+groups:
+  - name: skillfinder-operational-alerts
+    interval: 30s
+    rules:
+      - alert: SkillFinderApiUnavailable
+        expr: up{job="skillfinder-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La API de SkillFinder no responde a Prometheus"
+          description: "Prometheus no pudo consultar el exporter interno de SkillFinder durante al menos un minuto."
+
+      - alert: SkillFinderAvailabilityBelowTarget
+        expr: avg_over_time(up{job="skillfinder-api"}[1h]) < 0.99
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "La disponibilidad de la API esta por debajo del 99%"
+          description: "La disponibilidad observada durante una hora esta por debajo del objetivo RNF001."
+
+      - alert: SkillFinderServerErrorsHigh
+        expr: |
+          (
+            sum(rate(skillfinder_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(skillfinder_http_requests_total[5m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "La tasa de errores 5xx supera el 5%"
+          description: "La proporcion de respuestas HTTP 5xx supero el 5% durante cinco minutos."
+
+      - alert: SkillFinderSearchTooSlow
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(skillfinder_search_duration_seconds_bucket[5m])) by (le)
+          ) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "La busqueda de profesionales tarda mas de 3 segundos"
+          description: "El percentil 95 de las busquedas supero los 3 segundos durante cinco minutos."
+
+      - alert: SkillFinderMongoDisconnected
+        expr: skillfinder_mongodb_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SkillFinder perdio la conexion con MongoDB"
+          description: "El colector de metricas no puede consultar MongoDB."
+
+      - alert: SkillFinderBusinessMetricsStale
+        expr: time() - skillfinder_metrics_last_refresh_timestamp_seconds > 90
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Las metricas de negocio no se actualizaron"
+          description: "El colector de datos de negocio lleva mas de 90 segundos sin una actualizacion correcta."

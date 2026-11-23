@@ -1,0 +1,116 @@
+SKILLFINDER + GRAFANA — INICIO EN WINDOWS
+=========================================
+
+REQUISITOS
+----------
+- Docker Desktop iniciado y con Docker Compose v2.
+- Node.js 20 o superior y npm.
+- PowerShell o CMD.
+
+1) CONFIGURAR VARIABLES (solo la primera vez)
+--------------------------------------------
+Desde la carpeta raiz de SkillFinder:
+
+    copy .env.example .env
+
+Abre .env y cambia obligatoriamente:
+- GRAFANA_ADMIN_PASSWORD
+- GRAFANA_RENDERER_TOKEN
+- JWT_ACCESS_SECRET
+- JWT_REFRESH_SECRET
+
+Deja API_BIND_ADDRESS=127.0.0.1 para trabajar solo en esta computadora.
+Para usar un telefono fisico en la misma LAN, consulta el apartado Android.
+
+2) INICIAR API, MONGODB, PROMETHEUS Y GRAFANA
+--------------------------------------------
+    docker compose --env-file .env -f infra/docker-compose.yml up -d --build
+
+Esto levanta MongoDB (replica set), la API, Prometheus y Grafana. Los dashboards
+se provisionan automaticamente; no importes JSON manualmente.
+
+3) POBLAR LOS DASHBOARDS PARA UNA DEMOSTRACION (opcional)
+---------------------------------------------------------
+    docker compose --env-file .env -f infra/docker-compose.yml --profile tools run --rm seed
+    docker compose --env-file .env -f infra/docker-compose.yml restart api
+
+El seed crea cuentas, servicios, reservas completadas, calificaciones mutuas y
+eventos de auditoria ficticios para las categorias MEC, CHA, GOM y ELA. Se usa
+para probar los paneles y cumplir los minimos de los rankings. NO ejecutes este
+seed sobre una base que ya contenga datos reales del piloto.
+
+4) COMPROBAR LOS SERVICIOS
+--------------------------
+    docker compose --env-file .env -f infra/docker-compose.yml ps
+    docker compose --env-file .env -f infra/docker-compose.yml logs -f api prometheus grafana
+
+Abre estas direcciones:
+- Grafana:    http://localhost:3001
+- Prometheus: http://localhost:9090/targets  (skillfinder-api debe estar UP)
+- API:        http://localhost:3000/api/health
+- API docs:   http://localhost:3000/api/docs
+
+En Grafana inicia sesion con GRAFANA_ADMIN_USER y GRAFANA_ADMIN_PASSWORD del
+archivo .env. En la carpeta SkillFinder encontraras:
+- SkillFinder - Dashboard de negocio
+- SkillFinder - Dashboard tecnico
+- SkillFinder - Reportes por categoria
+
+5) INICIAR LA APLICACION WEB
+----------------------------
+En una segunda terminal, desde la raiz del proyecto:
+
+    npm install
+    copy apps\client\.env.example apps\client\.env
+    npm run web
+
+Expo Web se abre normalmente en http://localhost:8081. La API ya esta corriendo
+en Docker; no inicies una segunda API en otro puerto.
+
+ANDROID
+-------
+- Emulador Android: en apps/client/.env usa
+  EXPO_PUBLIC_API_URL=http://10.0.2.2:3000/api
+- Telefono fisico en la misma red: usa la IP LAN de la computadora en
+  EXPO_PUBLIC_API_URL, por ejemplo http://192.168.1.20:3000/api.
+  Cambia API_BIND_ADDRESS=0.0.0.0 en el .env raiz y permite el puerto 3000
+  unicamente en el perfil de red privada del Firewall de Windows.
+- Grafana y Prometheus permanecen enlazados a 127.0.0.1.
+
+COMANDOS UTILES
+---------------
+Ver estado:
+    docker compose --env-file .env -f infra/docker-compose.yml ps
+
+Ver logs:
+    docker compose --env-file .env -f infra/docker-compose.yml logs -f api prometheus grafana
+
+Actualizar metricas inmediatamente despues de cambiar datos/seed:
+    docker compose --env-file .env -f infra/docker-compose.yml restart api
+
+Detener servicios (conserva los volumenes y datos):
+    docker compose --env-file .env -f infra/docker-compose.yml down
+
+No uses "down -v" salvo que quieras borrar tambien la base MongoDB y los datos
+persistentes de Grafana y Prometheus.
+
+EXPORTAR UN PDF DE LOS DASHBOARDS (opcional)
+--------------------------------------------
+El renderizador consume muchos recursos y se inicia solo cuando se necesita:
+
+    docker compose --env-file .env -f infra/docker-compose.yml --profile reports up -d renderer
+    py -m pip install -r infra/scripts/requirements-grafana.txt
+    $env:GRAFANA_URL = "http://localhost:3001"
+    $env:GRAFANA_USER = "admin"
+    $env:GRAFANA_PASSWORD = "la-clave-configurada-en-.env"
+    py infra/scripts/export_grafana_report.py --from now-7d --to now --category MEC
+
+El PDF se guarda en reports/.
+
+IMPORTANTE
+----------
+La base real de este proyecto es MongoDB. Grafana recibe metricas de negocio
+calculadas desde sus modelos y metricas tecnicas de la API mediante Prometheus.
+El seed es solo de demostracion; sus cifras no representan el piloto con
+participantes reales. Los paneles de disponibilidad de 30 dias necesitan
+acumular observaciones durante ese periodo.

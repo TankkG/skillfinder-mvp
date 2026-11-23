@@ -1,0 +1,179 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: skillfinder-mongodb
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MONGODB_HOST_PORT:-27017}:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval 'try { rs.status().ok } catch (e) {
+          rs.initiate({_id:"rs0",members:[{_id:0,host:"mongodb:27017"}]}).ok
+          }' | grep -q 1
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks:
+      - skillfinder-internal
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: skillfinder-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      API_PORT: 3000
+      METRICS_PORT: 9100
+      METRICS_BIND_ADDRESS: 0.0.0.0
+      API_BASE_URL: http://localhost:3000/api
+      MONGODB_URI: mongodb://mongodb:27017/skillfinder?replicaSet=rs0
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-this-access-secret-before-sharing}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-this-refresh-secret-before-sharing}
+      ACCESS_TOKEN_EXPIRES_IN: ${ACCESS_TOKEN_EXPIRES_IN:-15m}
+      REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-30d}
+      WEB_ALLOWED_ORIGINS: ${WEB_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:19006,http://localhost:3000}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador SkillFinder}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@skillfinder.bo}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin12345!}
+      AUTO_APPROVE_PROFESSIONALS: ${AUTO_APPROVE_PROFESSIONALS:-false}
+      DEFAULT_TIMEZONE: America/La_Paz
+      PILOT_SERVICE_AREA_CODE: CBBA-D2
+      PILOT_ENFORCE_BOUNDARY: ${PILOT_ENFORCE_BOUNDARY:-true}
+      BOOKING_SLOT_MINUTES: ${BOOKING_SLOT_MINUTES:-15}
+      BOOKING_HOLD_MINUTES: ${BOOKING_HOLD_MINUTES:-15}
+      BOOKING_MIN_ADVANCE_MINUTES: ${BOOKING_MIN_ADVANCE_MINUTES:-60}
+      BOOKING_MAX_FUTURE_DAYS: ${BOOKING_MAX_FUTURE_DAYS:-60}
+      SERVICE_BUFFER_MINUTES: ${SERVICE_BUFFER_MINUTES:-0}
+      EXPIRATION_JOB_INTERVAL_MS: ${EXPIRATION_JOB_INTERVAL_MS:-60000}
+      GRAFANA_METRICS_REFRESH_MS: ${GRAFANA_METRICS_REFRESH_MS:-30000}
+      GRAFANA_MIN_DISTRICT_RECORDS: ${GRAFANA_MIN_DISTRICT_RECORDS:-5}
+      UPLOAD_DIR: /app/apps/api/uploads
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_HOST_PORT:-3000}:3000"
+    volumes:
+      - api_uploads:/app/apps/api/uploads
+      - api_private_uploads:/app/apps/api/private-uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - skillfinder-internal
+
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    container_name: fg44r1a0qaqrkd
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=90d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_HOST_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - skillfinder-internal
+
+  grafana:
+    image: grafana/grafana:13.3.1
+    container_name: skillfinder-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-ChangeMe-Grafana-2026!}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_HOST_PORT:-3001}/
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      GF_RENDERING_RENDERER_TOKEN: ${GRAFANA_RENDERER_TOKEN:-SkillFinderRenderer-ChangeThis-2026}
+      GF_LOG_FILTERS: rendering:info
+    ports:
+      - "127.0.0.1:${GRAFANA_HOST_PORT:-3001}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - skillfinder-internal
+
+  renderer:
+    image: grafana/grafana-image-renderer:v5.12.11
+    container_name: skillfinder-grafana-renderer
+    restart: unless-stopped
+    environment:
+      AUTH_TOKEN: ${GRAFANA_RENDERER_TOKEN:-SkillFinderRenderer-ChangeThis-2026}
+    profiles: ["reports"]
+    networks:
+      - skillfinder-internal
+
+  seed:
+    build:
+      context: ..
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: skillfinder-seed
+    command: ["node", "apps/api/dist/scripts/seed.js"]
+    environment:
+      NODE_ENV: development
+      MONGODB_URI: mongodb://mongodb:27017/skillfinder?replicaSet=rs0
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-this-access-secret-before-sharing}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-this-refresh-secret-before-sharing}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrador SkillFinder}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@skillfinder.bo}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin12345!}
+      DEFAULT_TIMEZONE: America/La_Paz
+      PILOT_SERVICE_AREA_CODE: CBBA-D2
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    profiles: ["tools"]
+    networks:
+      - skillfinder-internal
+
+networks:
+  skillfinder-internal:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  api_uploads:
+  api_private_uploads:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "SkillFinder",
+    "slug": "skillfinder",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "skillfinder",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0F3D33",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "bo.skillfinder.app"
+    },
+    "android": {
+      "package": "bo.skillfinder.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F3D33"
+      },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SkillFinder usa tu ubicacion para mostrar profesionales cercanos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SkillFinder usa tus fotos para el perfil y documentos de verificacion."
+        }
+      ]
+    ]
+  }
+}
